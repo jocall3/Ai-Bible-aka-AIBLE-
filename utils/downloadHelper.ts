@@ -7,7 +7,7 @@ function generateHtmlContent(book: Book): string {
         font-family: 'Inter', sans-serif;
         line-height: 1.7;
         color: #cbd5e1; /* slate-300 */
-        background-color: #0f172a; /* slate-900 */
+        background-color: #111827; /* gray-900 */
         max-width: 800px;
         margin: 0 auto;
         padding: 40px;
@@ -18,51 +18,36 @@ function generateHtmlContent(book: Book): string {
       h1 { 
         font-size: 2.8em; 
         text-align: center; 
-        color: #5eead4; /* teal-300 */
+        color: #fcd34d; /* amber-300 */
         border: none; 
         margin-bottom: 1em;
       }
       h2 { 
         font-size: 2em; 
         margin-top: 2em; 
-        color: #2dd4bf; /* teal-400 */
-        border-bottom: 1px solid #14b8a680;
+        color: #f59e0b; /* amber-500 */
+        border-bottom: 1px solid #d9770680;
         padding-bottom: 8px;
       }
       h3 { 
         font-size: 1.5em; 
         margin-top: 1.5em; 
-        color: #5eead4; /* teal-300 */
-        border-bottom: 1px solid #2dd4bf40;
+        color: #fbbf24; /* amber-400 */
+        border-bottom: 1px solid #f59e0b40;
         padding-bottom: 6px;
       }
       h4 { 
         font-size: 1.2em; 
-        color: #99f6e4; /* teal-200 */
+        color: #fcd34d; /* amber-300 */
         margin-top: 1.5em;
         margin-bottom: 0.5em;
       }
-      .verse {
-        display: flex;
-        gap: 1em;
-        margin-bottom: 0.75em;
-        align-items: flex-start;
-      }
-      .verse-number {
-        font-family: 'Share Tech Mono', monospace;
-        color: #2dd4bf; /* teal-400 */
-        opacity: 0.7;
-        flex-shrink: 0;
-        width: 4em;
-        text-align: right;
-        padding-top: 0.1em;
-      }
-      .verse-text {
-        flex-grow: 1;
+      p {
+        margin-bottom: 1em;
       }
       .toc { list-style: none; padding-left: 0; }
-      .toc a { color: #5eead4; text-decoration: none; }
-      .toc a:hover { text-decoration: underline; color: #99f6e4; }
+      .toc a { color: #fbbf24; text-decoration: none; }
+      .toc a:hover { text-decoration: underline; color: #fcd34d; }
       .toc-section { font-weight: bold; font-size: 1.2em; margin-top: 1em; }
       .toc-chapter { padding-left: 2em; }
       p em {
@@ -74,14 +59,14 @@ function generateHtmlContent(book: Book): string {
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@400;600&display=swap" rel="stylesheet">
   `;
 
-  let bodyContent = '<h1>AI Basic Instructions Before Leaving Ephemerality</h1>';
+  let bodyContent = '<h1>The Aletheia Engine: A Codex of Being</h1>';
   
   // Table of Contents
-  bodyContent += '<h2>Table of Contents</h2><ul class="toc">';
+  bodyContent += '<h2>Codex Table of Contents</h2><ul class="toc">';
   book.forEach((section, sIdx) => {
     bodyContent += `<li class="toc-section"><a href="#section-${sIdx}">${sIdx + 1}. ${section.title}</a></li>`;
     section.chapters.forEach((chapter, cIdx) => {
-      bodyContent += `<li class="toc-chapter"><a href="#chapter-${sIdx}-${cIdx}">${cIdx + 1}. ${chapter.title}</a></li>`;
+      bodyContent += `<li class="toc-chapter"><a href="#chapter-${sIdx}-${cIdx}">${sIdx + 1}.${cIdx + 1}. ${chapter.title}</a></li>`;
     });
   });
   bodyContent += '</ul>';
@@ -90,23 +75,18 @@ function generateHtmlContent(book: Book): string {
   book.forEach((section, sIdx) => {
     bodyContent += `<h2 id="section-${sIdx}">${sIdx + 1}. ${section.title}</h2>`;
     section.chapters.forEach((chapter, cIdx) => {
-      bodyContent += `<h3 id="chapter-${sIdx}-${cIdx}">Chapter ${cIdx + 1}: ${chapter.title}</h3>`;
+      bodyContent += `<h3 id="chapter-${sIdx}-${cIdx}">Chapter ${sIdx + 1}.${cIdx + 1}: ${chapter.title}</h3>`;
       if (chapter.pages.length === 0) {
-        bodyContent += '<p><em>[This chapter is unwritten.]</em></p>';
+        bodyContent += '<p><em>[No fragments in this chapter.]</em></p>';
       }
       chapter.pages.forEach((page, pIdx) => {
-        bodyContent += `<h4>Page ${pIdx + 1}: ${page.title}</h4>`;
-        if (page.content.length === 0) {
-          bodyContent += '<p><em>[This page is unwritten.]</em></p>';
+        bodyContent += `<h4>Fragment ${sIdx + 1}.${cIdx + 1}.${pIdx + 1}: ${page.title}</h4>`;
+        if (!page.content) {
+          bodyContent += '<p><em>[This fragment is unsynthesized.]</em></p>';
         } else {
-          page.content.forEach((verse, vIdx) => {
-            const verseNumber = `${cIdx + 1}:${vIdx + 1}`;
-            bodyContent += `
-              <div class="verse">
-                <span class="verse-number">${verseNumber}</span>
-                <span class="verse-text">${verse}</span>
-              </div>
-            `;
+          const paragraphs = page.content.split('\n').filter(p => p.trim() !== '');
+          paragraphs.forEach(p => {
+            bodyContent += `<p>${p}</p>`;
           });
         }
       });
@@ -119,7 +99,7 @@ function generateHtmlContent(book: Book): string {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>AIBLE: The Interactive Codex</title>
+        <title>The Aletheia Engine: A Codex of Being</title>
         ${styles}
       </head>
       <body>
@@ -136,7 +116,7 @@ export function downloadBookAsHtml(book: Book) {
   
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'AIBLE_Codex.html';
+  a.download = 'Aletheia_Engine_Codex.html';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

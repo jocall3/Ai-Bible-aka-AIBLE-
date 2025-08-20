@@ -4,11 +4,11 @@ import { Editor } from './components/Editor';
 import { CodexOutline } from './components/CodexOutline';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { INITIAL_BOOK_DATA } from './constants';
-import { generatePageTitles, generatePageContent } from './services/geminiService';
+import { generateSectionPageTitles, generateChapterContent } from './services/geminiService';
 import { downloadBookAsHtml } from './utils/downloadHelper';
 import type { Book, Section, Chapter, Page } from './types';
 
-const LOCAL_STORAGE_KEY = 'aible-codex-data-v3';
+const LOCAL_STORAGE_KEY = 'aletheia-engine-codex-v1';
 
 const App: React.FC = () => {
   const [bookData, setBookData] = useState<Book>(() => {
@@ -16,8 +16,8 @@ const App: React.FC = () => {
       const savedData = window.localStorage.getItem(LOCAL_STORAGE_KEY);
       if (savedData) {
         const parsedData = JSON.parse(savedData);
-        // V3 check for scaffolded data
-        if (Array.isArray(parsedData) && parsedData[0]?.chapters[0]?.hasOwnProperty('pages')) {
+        // Basic check for new data structure
+        if (Array.isArray(parsedData) && parsedData[0]?.title === 'The Primal Query') {
           return parsedData;
         }
       }
@@ -30,10 +30,11 @@ const App: React.FC = () => {
 
   const [selectedPath, setSelectedPath] = useState<string>('0-0');
   const [activeView, setActiveView] = useState<'editor' | 'outline'>('editor');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isScaffolding, setIsScaffolding] = useState<boolean>(false);
   const [scaffoldingMessage, setScaffoldingMessage] = useState<string>('');
+  const [chapterGenStatus, setChapterGenStatus] = useState({ active: false, message: '' });
+
 
   // Auto-save book data
   useEffect(() => {
@@ -50,25 +51,38 @@ const App: React.FC = () => {
     if (!isScaffolded) {
       const scaffoldBook = async () => {
         setIsScaffolding(true);
-        setScaffoldingMessage('Initiating the codex forge...');
+        setScaffoldingMessage('Querying the Primal Axiom...');
         let newBook = JSON.parse(JSON.stringify(INITIAL_BOOK_DATA));
 
         for (const [sIdx, section] of newBook.entries()) {
-          for (const [cIdx, chapter] of section.chapters.entries()) {
-            try {
-              setScaffoldingMessage(`Outlining: ${section.title} - Chapter ${cIdx + 1}`);
-              const pageTitles = await generatePageTitles(section.title, chapter.title);
-              const newPages: Page[] = pageTitles.map(title => ({ title, content: [] }));
-              newBook[sIdx].chapters[cIdx].pages = newPages;
-              setBookData(JSON.parse(JSON.stringify(newBook))); // Update state progressively
-              await new Promise(res => setTimeout(res, 200)); // Rate limiting
-            } catch (err) {
-              console.error(`Failed to scaffold ${section.title} - ${chapter.title}:`, err);
-              setError(`Failed to outline a chapter. You may need to refresh. Error: ${err instanceof Error ? err.message : 'Unknown'}`);
-            }
+          try {
+            setScaffoldingMessage(`Synthesizing Section: ${section.title}`);
+            const chapterTitles = section.chapters.map(c => c.title);
+            if (chapterTitles.length === 0) continue;
+
+            const sectionPagesData = await generateSectionPageTitles(section.title, chapterTitles);
+            
+            const pageDataMap = new Map(sectionPagesData.map(item => [item.chapterTitle, item.titles]));
+
+            newBook[sIdx].chapters.forEach((chapter: Chapter) => {
+              const pageTitles = pageDataMap.get(chapter.title);
+              if (pageTitles) {
+                chapter.pages = pageTitles.map(title => ({ title, content: '' }));
+              }
+            });
+
+            setBookData(JSON.parse(JSON.stringify(newBook))); // Update state after each section
+            await new Promise(res => setTimeout(res, 1000)); // Safer rate limiting between sections
+          } catch (err) {
+            console.error(`Failed to scaffold section ${section.title}:`, err);
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+            setError(`Failed to synthesize section "${section.title}". A system reset (page refresh) may be required. Error: ${errorMessage}`);
+            // Stop scaffolding if one section fails.
+            setIsScaffolding(false);
+            return;
           }
         }
-        setScaffoldingMessage('Codex forged successfully.');
+        setScaffoldingMessage('Initial Synthesis Complete.');
         setTimeout(() => setIsScaffolding(false), 1500);
       };
       scaffoldBook();
@@ -96,7 +110,7 @@ const App: React.FC = () => {
     downloadBookAsHtml(bookData);
   }, [bookData]);
 
-  const handlePageContentChange = useCallback((newContent: string[]) => {
+  const handlePageContentChange = useCallback((newContent: string) => {
     if (isNaN(pageIndex)) return;
     setBookData(prevBook => {
       const newBook = JSON.parse(JSON.stringify(prevBook));
@@ -105,37 +119,51 @@ const App: React.FC = () => {
     });
   }, [sectionIndex, chapterIndex, pageIndex]);
 
-  const handleGeneratePageContent = useCallback(async () => {
-    if (!selectedSection || !selectedChapter || !selectedPage) return;
+  const handleAutoGenerateChapter = useCallback(async () => {
+    if (!selectedChapter || !selectedSection) return;
 
-    setIsLoading(true);
+    setChapterGenStatus({ active: true, message: 'Contacting the Engine core for chapter synthesis...' });
     setError(null);
+
     try {
-      const previousPageTitles = selectedChapter.pages
-        .slice(0, pageIndex)
-        .map(p => p.title);
-      
-      const content = await generatePageContent(
+      const pageTitles = selectedChapter.pages.map(p => p.title);
+      const generatedLogs = await generateChapterContent(
         selectedSection.title,
         selectedChapter.title,
-        selectedPage.title,
-        previousPageTitles
+        pageTitles
       );
-      handlePageContentChange(content);
+
+      const contentMap = new Map(generatedLogs.map(log => [log.title, log.content]));
+
+      setBookData(prevBook => {
+        const newBook = JSON.parse(JSON.stringify(prevBook));
+        const chapterToUpdate = newBook[sectionIndex].chapters[chapterIndex];
+        
+        chapterToUpdate.pages.forEach((page: Page) => {
+          if (contentMap.has(page.title)) {
+            page.content = contentMap.get(page.title) || '';
+          }
+        });
+
+        return newBook;
+      });
+
     } catch (err) {
-      console.error('Failed to generate content:', err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error during chapter synthesis.';
+      setError(`Chapter synthesis failed: ${errorMessage}`);
     } finally {
-      setIsLoading(false);
+      setChapterGenStatus({ active: false, message: 'Chapter synthesis received.' });
+      setTimeout(() => setChapterGenStatus({ active: false, message: '' }), 2500);
     }
-  }, [selectedSection, selectedChapter, selectedPage, pageIndex, handlePageContentChange]);
+  }, [sectionIndex, chapterIndex, selectedChapter, selectedSection]);
+
 
   if (isScaffolding) {
     return <LoadingOverlay message={scaffoldingMessage} />;
   }
 
   return (
-    <div className="bg-slate-900 text-slate-300 min-h-screen flex selection:bg-teal-400 selection:text-slate-900">
+    <div className="bg-gray-900 text-slate-300 min-h-screen flex selection:bg-amber-500 selection:text-gray-900">
       <Sidebar
         book={bookData}
         selectedPath={selectedPath}
@@ -147,13 +175,13 @@ const App: React.FC = () => {
             <div className="flex border-b border-slate-700">
                 <button 
                     onClick={() => setActiveView('editor')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${activeView === 'editor' ? 'border-b-2 border-teal-400 text-teal-300' : 'text-slate-400 hover:text-white'}`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${activeView === 'editor' ? 'border-b-2 border-amber-500 text-amber-300' : 'text-slate-400 hover:text-white'}`}
                 >
-                    Editor
+                    Codex Editor
                 </button>
                 <button
                     onClick={() => setActiveView('outline')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${activeView === 'outline' ? 'border-b-2 border-teal-400 text-teal-300' : 'text-slate-400 hover:text-white'}`}
+                    className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${activeView === 'outline' ? 'border-b-2 border-amber-500 text-amber-300' : 'text-slate-400 hover:text-white'}`}
                 >
                     Codex Outline
                 </button>
@@ -167,17 +195,18 @@ const App: React.FC = () => {
                     section={selectedSection}
                     chapter={selectedChapter}
                     page={selectedPage}
+                    sectionNumber={sectionIndex + 1}
                     chapterNumber={chapterIndex + 1}
                     pageNumber={!isNaN(pageIndex) ? pageIndex + 1 : undefined}
-                    isLoading={isLoading}
                     error={error}
-                    onGeneratePageContent={handleGeneratePageContent}
                     onPageContentChange={handlePageContentChange}
                     onSelectPage={(index) => handleSelectPath(`${sectionIndex}-${chapterIndex}-${index}`)}
+                    onAutoGenerateChapter={handleAutoGenerateChapter}
+                    chapterGenerationStatus={chapterGenStatus}
                   />
                 ) : (
                   <div className="flex-1 flex items-center justify-center text-slate-500">
-                    <p>Select a chapter to begin.</p>
+                    <p>Select a fragment to begin analysis.</p>
                   </div>
                 )
            ) : (

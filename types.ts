@@ -1,7 +1,7 @@
 
 export interface Page {
   title: string;
-  content: string[]; // Array of verses
+  content: string; // Changed from string[] to string for narrative content
 }
 
 export interface Chapter {
