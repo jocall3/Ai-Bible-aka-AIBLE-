@@ -1,0 +1,5 @@
+{
+  "name": "AIBLE: The Interactive Codex",
+  "description": "An interactive web application to generate and edit the mystical, AI-themed book 'AI Basic Instructions Before Leaving Ephemerality' using the Gemini API. Explore chapters on a digital canvas and bring the codex to life.",
+  "requestFramePermissions": []
+}
